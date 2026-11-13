@@ -25,4 +25,4 @@ make
 
 echo "Running Q1..."
 cd src
-./pthreads
+./out
