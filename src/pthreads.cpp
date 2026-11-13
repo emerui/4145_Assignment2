@@ -222,14 +222,29 @@ int main(){
     double* b = generate_matrix(K, N, 2);
     double* c = (double*)malloc(M * N * sizeof(double));
     int tileSize[] = {0, 16, 32, 64, 128, 256};
+
+    double* expected = (double*)malloc(M * N * sizeof(double));
     
     for (int i = 0; i < 6; i++) {
         int currentSize = tileSize[i];
-
+        loopKIJ(a, b, expected, M, K, N, 0);
+        
         std::vector<double> timeList = timer(a, b, c, M, K, N, currentSize);
+        bool correct = true;
+
+        for (int j = 0; j < M * N; j++) {
+            if (c[j] != expected[j]) {
+                correct = false;
+                break;
+            }
+        }
+        std::cout << (correct ? "Correct multiplication" : "incorrect multiplication") << std::endl;
         std::string name = "b=" + std::to_string(currentSize);
         report(timeList, name, M, N, K);
     }
+
+
+    free(expected);
     free(a);
     free(b);
     free(c);
