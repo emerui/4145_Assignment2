@@ -254,13 +254,31 @@ int main(){
     a = generate_matrix(M, K, 1);
     b = generate_matrix(K, N, 2);
     c = (double*)malloc(M * N * sizeof(double));
+    expected = (double*)malloc(M * N * sizeof(double));
+
 
     std::vector<double> timeList = timer(a,b,c,M,K,N, 0);
+    bool correct = true;
+
+    for (int j = 0; j < M * N; j++) {
+        if (c[j] != expected[j]) {
+            correct = false;
+            break;
+        }
+    }
+    std::cout << (correct ? "Correct multiplication" : "incorrect multiplication") << std::endl;
     report(timeList, "b=0", M, N, K);
 
+    free(expected)
     free(a);
     free(b);
     free(c);
+
+    //one-dimensional partition
+    // make for loop for number of p threads?
+    //pthread_create(&thread[i], NULL, hello, &rank[i]);
+    //pthread_join(thread[i], NULL);
+
 
 }
 
