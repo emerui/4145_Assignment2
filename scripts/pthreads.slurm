@@ -1,14 +1,14 @@
 #!/bin/bash
 
 #SBATCH --partition=Centaurus
-#SBATCH --job-name=a2-q1
+#SBATCH --job-name=a2-q2
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=36
 #SBATCH --exclusive
 #SBATCH --mem=16G
 #SBATCH --time=00:30:00
-#SBATCH --output=a2-q1_%j.log
+#SBATCH --output=a2-q2_%j.log
 
 set -e
 
