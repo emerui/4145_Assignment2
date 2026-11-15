@@ -33,22 +33,26 @@ struct realargs {
     int rank;
     int p;
 
+
     const double* a;
     const double* b;
     double* c;
 
     int M, K, N;
     int tileSize;
+    int pr;
+    int pc;
 };
 
 struct RunArgs {
     const double* a;
     const double* b;
     double* c;
-
     int M, K, N;
     int tileSize;
     int p;
+    int pr; 
+    int pc;
 };
 
 
@@ -128,17 +132,17 @@ static inline double *generate_matrix(int rows, int cols, std::uint64_t seed) {
 
 //start of assignment code
 
-void threadsLoopKIJ(const double* a, const double* b, double* c, int M, int K, int N, int tileSize, int startRow, int endRow) {
+void threadsLoopKIJ(const double* a, const double* b, double* c, int M, int K, int N, int tileSize, int startRow, int endRow, int startCol, int endCol) {
     if (tileSize == 0) {
         for (int i = startRow; i < endRow; i++) {
-            for (int j = 0; j < N; j++) {
+            for (int j = startCol; j < endCol; j++) {
                 c[i * N + j] = 0.0;
             }
         }
 
         for (int k = 0; k < K; k++) {
             for (int i = startRow; i < endRow; i++) {
-                for (int j = 0; j < N; j++) {
+                for (int j = startCol; j < endCol; j++) {
                     c[i * N + j] = a[i * K + k] * b[k * N + j] + c[i * N + j];
                 }
             }
@@ -147,19 +151,19 @@ void threadsLoopKIJ(const double* a, const double* b, double* c, int M, int K, i
     }
 
     for (int i0 = startRow; i0 < endRow; i0 += tileSize) {
-        for (int j0 = 0; j0 < N; j0 += tileSize) {
+        for (int j0 = startCol; j0 < endCol; j0 += tileSize) {
             int tileEndRow = i0 + tileSize;
             if (tileEndRow > endRow) {
                 tileEndRow = endRow;
             }
 
-            int endCol = j0 + tileSize;
-            if (endCol > N) {
-                endCol = N;
+            int tileendCol = j0 + tileSize;
+            if (tileendCol > endCol) {
+                tileendCol = endCol;
             }
 
             for (int i = i0; i < tileEndRow; i++) {
-                for (int j = j0; j < endCol; j++) {
+                for (int j = j0; j < tileendCol; j++) {
                     c[i * N + j] = 0.0;
                 }
             }
@@ -172,7 +176,7 @@ void threadsLoopKIJ(const double* a, const double* b, double* c, int M, int K, i
 
                 for (int k = k0; k < endK; k++) {
                     for (int i = i0; i < tileEndRow; i++) {
-                        for (int j = j0; j < endCol; j++) {
+                        for (int j = j0; j < tileendCol; j++) {
                             c[i * N + j] =
                                 a[i * K + k] * b[k * N + j] + c[i * N + j];
                         }
@@ -196,11 +200,38 @@ void* threadWorker(void* arg) {
         endRow = args->M;
     }
 
-    threadsLoopKIJ(args->a, args->b, args->c, args->M, args->K, args->N, args->tileSize, startRow, endRow);
+    threadsLoopKIJ(args->a, args->b, args->c, args->M, args->K, args->N, args->tileSize, startRow, endRow, 0, args->N);
 
     return NULL;
 }
+void* threadWorker2(void* arg) {
+    realargs* args = (realargs*)arg;
 
+    int bi = args->rank / args->pc;
+    int bj = args->rank % args->pc;
+
+    int rowsPerThread = args->M / args->pr;
+
+    int startRow = bi * rowsPerThread;
+    int endRow = startRow + rowsPerThread;
+
+    if (bi == args->pr - 1) {
+        endRow = args->M;
+    }
+
+    int colsPerThread = args->N / args->pc;
+
+    int startCol = bj * colsPerThread;
+    int endCol = startCol + colsPerThread;
+
+    if (bj == args->pc - 1) {
+        endCol = args->N;
+    }
+    threadsLoopKIJ(args->a, args->b, args->c, args->M, args->K, args->N, args->tileSize, startRow, endRow, startCol, endCol);
+
+
+    return NULL;
+}
 
 void loopKIJ(const double* a, const double* b, double* c, int M, int K, int N, int tileSize) {
     if (tileSize == 0) {
@@ -257,8 +288,6 @@ void sequentialRun(void* arg) {
     loopKIJ(args->a, args->b, args->c,
             args->M, args->K, args->N, args->tileSize);
 }
-
-
 void pthreadRun(void* arg) {
     RunArgs* args = (RunArgs*)arg;
 
@@ -282,6 +311,36 @@ void pthreadRun(void* arg) {
         pthread_create(&threads[i], NULL, threadWorker, &threadArgs[i]);
     }
     
+    for (int i = 0; i < args->p; i++) {
+        pthread_join(threads[i], NULL);
+    }
+}
+void pthreadRun2D(void* arg) {
+    RunArgs* args = (RunArgs*)arg;
+
+    std::vector<pthread_t> threads(args->p);
+    std::vector<realargs> threadArgs(args->p);
+
+    for (int i = 0; i < args->p; i++) {
+        threadArgs[i].rank = i;
+        threadArgs[i].p = args->p;
+
+        threadArgs[i].a = args->a;
+        threadArgs[i].b = args->b;
+        threadArgs[i].c = args->c;
+
+        threadArgs[i].M = args->M;
+        threadArgs[i].K = args->K;
+        threadArgs[i].N = args->N;
+
+        threadArgs[i].tileSize = args->tileSize;
+
+        threadArgs[i].pr = args->pr;
+        threadArgs[i].pc = args->pc;
+
+        pthread_create(&threads[i], NULL, threadWorker2, &threadArgs[i]);
+    }
+
     for (int i = 0; i < args->p; i++) {
         pthread_join(threads[i], NULL);
     }
@@ -345,7 +404,7 @@ int main(){
     std::ofstream fout("../data/matrixMult.csv");
     fout << "matrix size,bSize,threads,speedup\n";
     fout.close();
-    
+
     int M = 2048;
     int K = 2048;
     int N = 2048;
@@ -504,7 +563,118 @@ int main(){
     free(c);
     free(expected);
 
+    // Q3: two-dimensional partitioning
+
+    int gridRows[] = {1, 2, 2, 3, 3, 6};
+    int gridCols[] = {2, 2, 4, 4, 6, 6};
+
+    M = K = N = 1024;
+
+    a = generate_matrix(M, K, 1);
+    b = generate_matrix(K, N, 2);
+    c = (double*)malloc(M * N * sizeof(double));
+    expected = (double*)malloc(M * N * sizeof(double));
+
+    loopKIJ(a, b, expected, M, K, N, 0);
+
+    for (int i = 0; i < 6; i++) {
+        int pr = gridRows[i];
+        int pc = gridCols[i];
+        int p = pr * pc;
+
+        RunArgs args = {a, b, c, M, K, N, 64, p, pr, pc};
+
+        timeList = timer(pthreadRun2D, &args);
+
+        bool correct = true;
+        for (int x = 0; x < M * N; x++) {
+            if (c[x] != expected[x]) {
+                correct = false;
+                break;
+            }
+        }
+
+        std::cout << (correct ? "Correct multiplication" : "incorrect multiplication") << std::endl;
+
+        std::string name = "2D b=64, grid=" +
+            std::to_string(pr) + "x" + std::to_string(pc);
+
+        double pthreadMedian = report(timeList, name, M, N, K);
+        double speedup = medianB64 / pthreadMedian;
+
+        std::cout << "Speedup: " << speedup << "x" << std::endl;
+    }
+
+    free(a);
+    free(b);
+    free(c);
+    free(expected);
+
+
+    M = K = N = 2048;
+
+    a = generate_matrix(M, K, 1);
+    b = generate_matrix(K, N, 2);
+    c = (double*)malloc(M * N * sizeof(double));
+    expected = (double*)malloc(M * N * sizeof(double));
+
+    loopKIJ(a, b, expected, M, K, N, 0);
+
+    for (int i = 0; i < 6; i++) {
+        int pr = gridRows[i];
+        int pc = gridCols[i];
+        int p = pr * pc;
+
+        RunArgs args = {a, b, c, M, K, N, 64, p, pr, pc};
+
+        timeList = timer(pthreadRun2D, &args);
+
+        bool correct = true;
+        for (int x = 0; x < M * N; x++) {
+            if (c[x] != expected[x]) {
+                correct = false;
+                break;
+            }
+        }
+
+        std::cout << (correct ? "Correct multiplication" : "incorrect multiplication") << std::endl;
+
+        std::string name = "2D b=64, grid=" +
+            std::to_string(pr) + "x" + std::to_string(pc);
+
+        double pthreadMedian = report(timeList, name, M, N, K);
+        double speedup = median2048B64 / pthreadMedian;
+
+        std::cout << "Speedup: " << speedup << "x" << std::endl;
+    }
+
+    // Extra 1 x 36 configuration
+    args = {a, b, c, M, K, N, 64, 36, 1, 36};
+
+    timeList = timer(pthreadRun2D, &args);
+
+    correct = true;
+    for (int x = 0; x < M * N; x++) {
+        if (c[x] != expected[x]) {
+            correct = false;
+            break;
+        }
+    }
+
+    std::cout << (correct ? "Correct multiplication" : "incorrect multiplication") << std::endl;
+
+    double pthreadMedian = report(timeList, "2D b=64, grid=1x36", M, N, K);
+    double speedup = median2048B64 / pthreadMedian;
+
+    std::cout << "Speedup: " << speedup << "x" << std::endl;
+
+    free(a);
+    free(b);
+    free(c);
+    free(expected);
+
 
 }
 
 #endif 
+
