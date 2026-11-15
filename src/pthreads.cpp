@@ -674,6 +674,42 @@ int main(){
     free(expected);
 
 
+    // Q4: Non-divisible dimensions
+
+    M = 1000;
+    K = 1024;
+    N = 1536;
+
+    a = generate_matrix(M, K, 1);
+    b = generate_matrix(K, N, 2);
+    c = (double*)malloc(M * N * sizeof(double));
+    expected = (double*)malloc(M * N * sizeof(double));
+
+    loopKIJ(a, b, expected, M, K, N, 0);
+
+    RunArgs q4Args = {a, b, c, M, K, N, 64, 36, 6, 6};
+
+    timeList = timer(pthreadRun2D, &q4Args);
+
+    bool q4Correct = true;
+
+    for (int x = 0; x < M * N; x++) {
+        if (c[x] != expected[x]) {
+            q4Correct = false;
+            break;
+        }
+    }
+
+    std::cout << (q4Correct ? "Correct multiplication" : "incorrect multiplication") << std::endl;
+
+    report(timeList, "Q4 2D b=64, grid=6x6", M, N, K);
+
+    free(a);
+    free(b);
+    free(c);
+    free(expected);
+
+
 }
 
 #endif 
