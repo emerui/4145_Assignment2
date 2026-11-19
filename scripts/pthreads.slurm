@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=36
 #SBATCH --exclusive
 #SBATCH --mem=16G
-#SBATCH --time=00:30:00
+#SBATCH --time=00:50:00
 #SBATCH --output=a2-q2_%j.log
 
 set -e
@@ -22,7 +22,14 @@ g++ --version | head -n 1
 echo "Building program..."
 make clean
 make
-
-echo "Running Q1..."
+echo "Running Part A (pthreads)..."
 cd src
-./out
+./pthreads_out
+
+echo "Running Part B (OpenMP)..."
+export OMP_NUM_THREADS=36
+export OMP_PROC_BIND=true
+export OMP_PLACES=cores
+./openmp_out
+
+echo "Both programs finished."
